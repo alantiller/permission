@@ -1,0 +1,6 @@
+/vendor/
+/.cache/
+/phpstan.neon
+/phpunit.xml
+/composer.lock
+.DS_Store

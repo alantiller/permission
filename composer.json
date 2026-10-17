@@ -1,0 +1,36 @@
+{
+	"name": "alantiller/permission",
+	"description": "PDO permissions, optional roles and application-defined policies for PHP",
+	"type": "library",
+	"license": "MIT",
+	"autoload": {
+		"psr-4": {
+			"Alantiller\\Permission\\": "src/"
+		}
+    },
+    "autoload-dev": {
+        "psr-4": {
+			"Alantiller\\Permission\\Tests\\": "tests/"
+		}
+    },
+    "authors": [
+		{
+			"name": "Alan Tiller",
+			"email": "alan@alantiller.com"
+		}
+	],
+    "require": {
+		"php": ">=8.1",
+		"php-64bit": ">=8.1",
+		"ext-pdo": "*"
+	},
+    "require-dev": {
+		"phpstan/phpstan": "^2.1",
+		"phpunit/phpunit": "^10.5"
+	},
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse --no-progress",
+        "check": ["@analyse", "@test"]
+    }
+}
