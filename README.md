@@ -1,6 +1,6 @@
 # alantiller/permission
 
-A PHP authorization library built around **`new Client($pdo, $config)`**. Use direct user permissions, add roles when grouping helps, and attach PHP policies when an action also depends on a resource or business rule.
+A PHP authorization library built around **`new Permission($pdo, $config)`**. Use direct user permissions, add roles when grouping helps, and attach PHP policies when an action also depends on a resource or business rule.
 
 There are no third-party runtime packages. The library owns permission decisions and assignment persistence. Your application owns authentication, users, migrations, administration, resource loading and HTTP responses.
 
@@ -80,7 +80,7 @@ Create the database tables through **your application's migrations** using the [
 
 require __DIR__ . '/vendor/autoload.php';
 
-use Alantiller\Permission\Client;
+use Alantiller\Permission;
 
 $pdo = new PDO(
     'mysql:host=localhost;dbname=my_app;charset=utf8mb4',
@@ -92,7 +92,7 @@ $pdo = new PDO(
     ]
 );
 
-$permissions = new Client($pdo, []);
+$permissions = new Permission($pdo, []);
 
 // Run definition changes in trusted application setup or administration.
 $permissions->create_permission('documents.read', 'Read documents');
@@ -120,10 +120,10 @@ For SQLite, configure the connection before constructing the client:
 $pdo = new PDO('sqlite:' . __DIR__ . '/app.sqlite');
 $pdo->exec('PRAGMA foreign_keys = ON');
 $pdo->exec('PRAGMA busy_timeout = 5000');
-$permissions = new Client($pdo);
+$permissions = new Permission($pdo);
 ```
 
-`Client` sets PDO's error mode to exceptions. It requires SQLite foreign-key enforcement to already be enabled, and rejects unsupported drivers. It does not inspect every table or constraint; install the documented schema correctly. PostgreSQL and MariaDB are not currently supported or verified.
+`Permission` sets PDO's error mode to exceptions. It requires SQLite foreign-key enforcement to already be enabled, and rejects unsupported drivers. It does not inspect every table or constraint; install the documented schema correctly. PostgreSQL and MariaDB are not currently supported or verified.
 
 ### Scoped policy example
 
@@ -134,7 +134,7 @@ After applying the [SQLite migration](#sqlite-migration-sql) to `app.sqlite`, sa
 
 require __DIR__ . '/vendor/autoload.php';
 
-use Alantiller\Permission\Client;
+use Alantiller\Permission;
 
 $pdo = new PDO('sqlite:' . __DIR__ . '/app.sqlite');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -154,7 +154,7 @@ function can_edit_document(int $user_id, array $context): bool
     return is_array($document) && ($document['owner_id'] ?? null) === $user_id;
 }
 
-$permissions = new Client($pdo, [
+$permissions = new Permission($pdo, [
     'scope' => 'organisation:10',
     'policies' => ['documents.edit' => 'can_edit_document'],
 ]);
@@ -210,7 +210,7 @@ Names are exact: `documents.read` grants nothing for `documents.edit`. There are
 ## Direct permissions
 
 ```php
-$permissions = new Client($pdo, ['roles_enabled' => false]);
+$permissions = new Permission($pdo, ['roles_enabled' => false]);
 $permissions->create_permission('reports.export', 'Export reports');
 
 $permissions->grant_permission_to_user(42, 'reports.export');
@@ -274,7 +274,7 @@ function can_edit_owned_document(int $user_id, array $context): bool
     return is_array($document) && ($document['owner_id'] ?? null) === $user_id;
 }
 
-$permissions = new Client($pdo, [
+$permissions = new Permission($pdo, [
     'policies' => [
         'documents.edit' => 'can_edit_owned_document',
     ],
@@ -300,7 +300,7 @@ Set a scope to isolate user assignments for an organisation, team, project or ot
 ```php
 // Resolve and authorize the active organisation in application code first.
 $organisation_id = 10;
-$permissions = new Client($pdo, [
+$permissions = new Permission($pdo, [
     'scope' => 'organisation:' . $organisation_id,
     'policies' => $application_policies,
 ]);
@@ -323,10 +323,10 @@ Authenticate with `alantiller/auth` first, then pass its public user ID into thi
 
 ```php
 use Alantiller\Auth\Client as AuthClient;
-use Alantiller\Permission\Client as PermissionClient;
+use Alantiller\Permission;
 
 $auth = new AuthClient($pdo, $auth_config);
-$permissions = new PermissionClient($pdo, $permission_config);
+$permissions = new Permission($pdo, $permission_config);
 
 // $auth_token comes from your application's session or bearer-token handling.
 $result = $auth->authenticate_token($auth_token);
@@ -359,7 +359,7 @@ All options are optional. Keys and new API names use snake_case. Unknown keys an
 Table names must have 1–64 ASCII letters, digits or underscores and start with a letter or underscore. All five names must be distinct, ignoring case, even with roles disabled. Database-qualified names such as `schema.permissions` are not accepted. Column names are fixed; table names are configurable.
 
 ```php
-$permissions = new Client($pdo, [
+$permissions = new Permission($pdo, [
     'permissions_table' => 'app_permissions',
     'roles_table' => 'app_roles',
     'role_permissions_table' => 'app_role_permissions',
@@ -441,7 +441,7 @@ CREATE TABLE user_permissions (
 ### SQLite migration SQL
 
 ```sql
--- Application migration reference: run explicitly, never by the Client constructor.
+-- Application migration reference: run explicitly, never by the Permission constructor.
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE permissions (
@@ -534,11 +534,11 @@ Deleting a permission or role is global catalogue administration: `delete_permis
 
 ## API reference
 
-The public entry point is `Alantiller\Permission\Client`. All methods require the caller to authorize management access where applicable. Return values are native booleans, void or lists; this library does not return auth-style `success` result envelopes.
+The public entry point is `Alantiller\Permission`. All methods require the caller to authorize management access where applicable. Return values are native booleans, void or lists; this library does not return auth-style `success` result envelopes.
 
 | Method | Return | Behavior |
 | --- | --- | --- |
-| `__construct(PDO $pdo, array $config = [])` | Client | Validate configuration; set PDO exception mode; create no schema. |
+| `__construct(PDO $pdo, array $config = [])` | Permission | Validate configuration; set PDO exception mode; create no schema. |
 | `create_permission(string $permission, string $description = '')` | `void` | Insert a shared definition if missing; preserve existing descriptions. |
 | `delete_permission(string $permission)` | `bool` | Delete globally and cascade links; false if missing. |
 | `get_permissions()` | `list<array{name: string, description: string}>` | Sorted global permission catalogue. |
@@ -641,7 +641,7 @@ The workspace started empty. The neighboring `alantiller/auth` checkout supplied
 
 #### Model and ownership
 
-- `Client(PDO $pdo, array $config = [])` is the single public service. It keeps configuration, an application-owned connection and policy callables, with no current user or result cache.
+- `Permission(PDO $pdo, array $config = [])` is the single public service. It keeps configuration, an application-owned connection and policy callables, with no current user or result cache.
 - Direct allow/deny overrides are the foundation. Roles are optional additive grant groups; policies are optional restrictive PHP callbacks. The same access-check API works with all four combinations.
 - Explicit denial overrides every grant source. Removing an override exposes the remaining role grants. Unknown actions deny by default; malformed input and operational failures throw.
 - Exact scopes isolate user assignments. Catalogues and role-permission links are shared. There is no global-scope inheritance or implicit administrator bypass.
@@ -684,3 +684,9 @@ Verification for this revision: `composer analyse -- --debug` passed at PHPStan 
 All schemas, usage examples and development notes now live in this README to match the documentation layout of `alantiller/auth`. The separate database, documentation and example directories were removed. Tests now extract and execute the documented MySQL or SQLite migration SQL from this file, and PHPStan analyzes source and tests. The scoped policy example above replaces the separate example script. This changes documentation layout and test setup without changing the public API or database definitions. The entity/tenant redesign discussed separately remains unimplemented.
 
 Verification: `composer validate --strict` and `composer analyse -- --debug` passed; `composer test` passed with 23 tests and 244 assertions on PHP 8.5.11 / SQLite. The scoped policy example was extracted from this README and run against a temporary database created from its documented SQLite SQL; its output matched the expected output above. The removed directories and stale file references were checked. MySQL and minimum PHP 8.1 runtime verification remain outstanding.
+
+### 2026-10-17 — Simplify the public class name
+
+The public entry point is now `Alantiller\Permission`, implemented in `src/Permission.php`. Import it with `use Alantiller\Permission;` and construct it with `new Permission($pdo, $config)`. Composer autoloading, test types and README examples use this class. Exception classes retain their existing `Alantiller\Permission\Exceptions` namespace. This intentionally replaces the earlier draft entry point without a compatibility alias; update application imports and regenerate Composer autoload files with `composer dump-autoload`. Method names, configuration and database schema are unchanged.
+
+Verification: optimized Composer autoload generation with `--strict-psr`, Composer validation and PHPStan level 8 passed. PHPUnit passed with 23 tests and 244 assertions on PHP 8.5.11 / SQLite. The README's scoped policy example ran successfully with the new class and matched its documented output.

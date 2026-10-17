@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Alantiller\Permission;
+namespace Alantiller;
 
 use Alantiller\Permission\Exceptions\AccessDeniedException;
 use Alantiller\Permission\Exceptions\ConfigurationException;
@@ -21,7 +21,7 @@ use Throwable;
  * authentication, schema migrations and authorization of all management calls.
  * No current user or permission-result cache is retained.
  */
-final class Client
+final class Permission
 {
     /** @var PDO Application-owned connection, shared with its transaction boundaries. */
     private PDO $pdo;
@@ -42,7 +42,7 @@ final class Client
     private array $policies;
 
     /**
-     * Configure a client without creating tables or loading any user.
+     * Configure the permission service without creating tables or loading any user.
      *
      * Sets PDO error mode to exceptions. SQLite must already have foreign keys
      * enabled; MySQL tables must use InnoDB and the supplied constraints.
@@ -93,7 +93,7 @@ final class Client
             if ($this->driver === 'sqlite') {
                 $foreign_keys = $pdo->query('PRAGMA foreign_keys');
                 if ($foreign_keys === false || (int) $foreign_keys->fetchColumn() !== 1) {
-                    throw new ConfigurationException('Enable PRAGMA foreign_keys = ON before constructing Client.');
+                    throw new ConfigurationException('Enable PRAGMA foreign_keys = ON before constructing Permission.');
                 }
             }
         } catch (PDOException $exception) {

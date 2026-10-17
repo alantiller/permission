@@ -2,7 +2,7 @@
 
 namespace Alantiller\Permission\Tests;
 
-use Alantiller\Permission\Client;
+use Alantiller\Permission;
 use Alantiller\Permission\Exceptions\AccessDeniedException;
 use Alantiller\Permission\Exceptions\ConfigurationException;
 use Alantiller\Permission\Exceptions\DatabaseException;
@@ -16,13 +16,13 @@ use PHPUnit\Framework\TestCase;
 use Throwable;
 
 /** Integration coverage runs against the exact application migration SQL in README.md. */
-final class ClientTest extends TestCase
+final class PermissionTest extends TestCase
 {
     /** @var PDO Isolated SQLite connection or explicitly configured MySQL test connection. */
     private PDO $pdo;
 
-    /** @var Client Client configured for this test's tables. */
-    private Client $client;
+    /** @var Permission Permission configured for this test's tables. */
+    private Permission $client;
 
     /** @var array<string, mixed> Table configuration shared by clients in a test. */
     private array $config;
@@ -78,7 +78,7 @@ final class ClientTest extends TestCase
                 $this->pdo->exec($statement);
             }
         }
-        $this->client = new Client($this->pdo, $this->config);
+        $this->client = new Permission($this->pdo, $this->config);
     }
 
     /** Roll back test-owned work and remove only this test's random table names. @return void */
@@ -106,7 +106,7 @@ final class ClientTest extends TestCase
         self::assertSame([], $this->client->get_permissions_for_role('missing'));
         $pdo = new PDO('sqlite::memory:');
         $pdo->exec('PRAGMA foreign_keys = ON');
-        $empty = new Client($pdo);
+        $empty = new Permission($pdo);
         $statement = $pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'");
         self::assertNotFalse($statement);
         self::assertSame(0, (int) $statement->fetchColumn());
@@ -187,8 +187,8 @@ final class ClientTest extends TestCase
     public function test_strict_scope_isolation_and_shared_definitions(): void
     {
         $this->seed_editor();
-        $a = new Client($this->pdo, $this->config + ['scope' => 'team:1']);
-        $b = new Client($this->pdo, $this->config + ['scope' => 'team:2']);
+        $a = new Permission($this->pdo, $this->config + ['scope' => 'team:1']);
+        $b = new Permission($this->pdo, $this->config + ['scope' => 'team:2']);
         self::assertFalse($a->can(1, 'documents.edit'));
         $a->assign_role(1, 'editor');
         self::assertTrue($a->can(1, 'documents.edit'));
@@ -212,7 +212,7 @@ final class ClientTest extends TestCase
     {
         $this->client->create_permission('read');
         foreach (['A', 'a', str_repeat('a', 128)] as $scope) {
-            $client = new Client($this->pdo, $this->config + ['scope' => $scope]);
+            $client = new Permission($this->pdo, $this->config + ['scope' => $scope]);
             self::assertFalse($client->can(1, 'read'));
             $client->grant_permission_to_user(1, 'read');
             self::assertTrue($client->can(1, 'read'));
@@ -226,7 +226,7 @@ final class ClientTest extends TestCase
         foreach (['user_roles', 'role_permissions', 'roles'] as $name) {
             $this->pdo->exec('DROP TABLE ' . $this->table_names[$name]);
         }
-        $direct = new Client($this->pdo, $this->config + ['roles_enabled' => false]);
+        $direct = new Permission($this->pdo, $this->config + ['roles_enabled' => false]);
         $direct->create_permission('read');
         $direct->grant_permission_to_user(1, 'read');
         self::assertTrue($direct->can(1, 'read'));
@@ -249,7 +249,7 @@ final class ClientTest extends TestCase
     public function test_policy_ownership_and_evaluation_order(): void
     {
         $calls = 0;
-        $client = new Client($this->pdo, $this->config + ['policies' => [
+        $client = new Permission($this->pdo, $this->config + ['policies' => [
             'documents.edit' => static function (int $user_id, array $context) use (&$calls): bool {
                 ++$calls;
                 return ($context['owner_id'] ?? null) === $user_id;
@@ -274,11 +274,11 @@ final class ClientTest extends TestCase
     {
         $this->seed_editor();
         foreach ([1, 'yes', null, [], new \stdClass()] as $value) {
-            $client = new Client($this->pdo, $this->config + ['policies' => ['documents.edit' => static fn () => $value]]);
+            $client = new Permission($this->pdo, $this->config + ['policies' => ['documents.edit' => static fn () => $value]]);
             $this->assert_throws(PolicyException::class, fn () => $client->can(1, 'documents.edit'));
         }
         $failure = new LogicException('Policy service unavailable.');
-        $client = new Client($this->pdo, $this->config + ['policies' => ['documents.edit' => static fn () => throw $failure]]);
+        $client = new Permission($this->pdo, $this->config + ['policies' => ['documents.edit' => static fn () => throw $failure]]);
         self::assertSame($failure, $this->assert_throws(LogicException::class, fn () => $client->can(1, 'documents.edit')));
     }
 
@@ -348,7 +348,7 @@ final class ClientTest extends TestCase
         $this->seed_editor();
         $this->client->grant_permission_to_user(1, 'documents.edit');
         $this->client->assign_role(2, 'editor');
-        $other = new Client($this->pdo, $this->config + ['scope' => 'other']);
+        $other = new Permission($this->pdo, $this->config + ['scope' => 'other']);
         $other->assign_role(1, 'editor');
         $this->client->clear_user_assignments(1);
         self::assertFalse($this->pdo->inTransaction());
@@ -384,7 +384,7 @@ final class ClientTest extends TestCase
         $this->pdo->exec('DROP TABLE ' . $this->table_names['user_roles']);
         $this->assert_throws(DatabaseException::class, fn () => $this->client->clear_user_assignments(1));
         self::assertFalse($this->pdo->inTransaction());
-        $direct = new Client($this->pdo, $this->config + ['roles_enabled' => false]);
+        $direct = new Permission($this->pdo, $this->config + ['roles_enabled' => false]);
         self::assertTrue($direct->can(1, 'read'));
     }
 
@@ -398,7 +398,7 @@ final class ClientTest extends TestCase
         $this->assert_throws(DatabaseException::class, fn () => $this->client->clear_user_assignments(1));
         self::assertTrue($this->pdo->inTransaction());
         $this->pdo->rollBack();
-        $direct = new Client($this->pdo, $this->config + ['roles_enabled' => false]);
+        $direct = new Permission($this->pdo, $this->config + ['roles_enabled' => false]);
         self::assertTrue($direct->can(1, 'read'));
     }
 
@@ -406,7 +406,7 @@ final class ClientTest extends TestCase
     public function test_no_stale_permission_cache(): void
     {
         $this->seed_editor();
-        $fresh = new Client($this->pdo, $this->config);
+        $fresh = new Permission($this->pdo, $this->config);
         self::assertTrue($fresh->can(1, 'documents.edit'));
         $fresh->deny_permission_to_user(1, 'documents.edit');
         self::assertFalse($this->client->can(1, 'documents.edit'));
@@ -428,9 +428,9 @@ final class ClientTest extends TestCase
             ['roles_table' => $this->config['permissions_table']],
             ['roles_table' => strtoupper((string) $this->config['permissions_table'])],
         ] as $config) {
-            $this->assert_throws(ConfigurationException::class, fn () => new Client($this->pdo, array_replace($this->config, $config)));
+            $this->assert_throws(ConfigurationException::class, fn () => new Permission($this->pdo, array_replace($this->config, $config)));
         }
-        $this->assert_throws(ConfigurationException::class, static fn () => new Client(new PDO('sqlite::memory:')));
+        $this->assert_throws(ConfigurationException::class, static fn () => new Permission(new PDO('sqlite::memory:')));
     }
 
     /** Canonical names reject SQL-like input, wildcards, whitespace, Unicode and invalid boundaries. @return void */
